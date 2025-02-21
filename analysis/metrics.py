@@ -1,11 +1,12 @@
+from copy import deepcopy
+
 import numpy as np
-from tqdm import tqdm
 from rdkit import Chem, DataStructs
-from rdkit.Chem import Descriptors, Crippen, Lipinski, QED
-from analysis.SA_Score.sascorer import calculateScore
+from rdkit.Chem import QED, Crippen, Descriptors, Lipinski
+from tqdm import tqdm
 
 from analysis.molecule_builder import build_molecule
-from copy import deepcopy
+from analysis.SA_Score.sascorer import calculateScore
 
 
 class CategoricalDistribution:

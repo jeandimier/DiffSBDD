@@ -1,23 +1,28 @@
 import argparse
+import logging
+import os
+import warnings
 from argparse import Namespace
 from pathlib import Path
-import warnings
 
-import torch
-import pytorch_lightning as pl
-import yaml
 import numpy as np
+import pytorch_lightning as pl
+import torch
+import yaml
 
 from lightning_modules import LigandPocketDDPM
+from mlflow_utils import get_mlflow_logger
 
 
 def merge_args_and_yaml(args, config_dict):
     arg_dict = args.__dict__
     for key, value in config_dict.items():
         if key in arg_dict:
-            warnings.warn(f"Command line argument '{key}' (value: "
-                          f"{arg_dict[key]}) will be overwritten with value "
-                          f"{value} provided in the config file.")
+            warnings.warn(
+                f"Command line argument '{key}' (value: "
+                f"{arg_dict[key]}) will be overwritten with value "
+                f"{value} provided in the config file."
+            )
         if isinstance(value, dict):
             arg_dict[key] = Namespace(**value)
         else:
@@ -31,9 +36,11 @@ def merge_configs(config, resume_config):
         if isinstance(value, Namespace):
             value = value.__dict__
         if key in config and config[key] != value:
-            warnings.warn(f"Config parameter '{key}' (value: "
-                          f"{config[key]}) will be overwritten with value "
-                          f"{value} from the checkpoint.")
+            warnings.warn(
+                f"Config parameter '{key}' (value: "
+                f"{config[key]}) will be overwritten with value "
+                f"{value} from the checkpoint."
+            )
         config[key] = value
     return config
 
@@ -43,27 +50,28 @@ def merge_configs(config, resume_config):
 # ______________________________________________________________________________
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
-    p.add_argument('--config', type=str, required=True)
-    p.add_argument('--resume', type=str, default=None)
+    p.add_argument("--config", type=str, required=True)
+    p.add_argument("--resume", type=str, default=None)
     args = p.parse_args()
 
-    with open(args.config, 'r') as f:
+    with open(os.path.join("configs", args.config), "r") as f:
         config = yaml.safe_load(f)
 
-    assert 'resume' not in config
+    assert "resume" not in config
 
     # Get main config
     ckpt_path = None if args.resume is None else Path(args.resume)
     if args.resume is not None:
-        resume_config = torch.load(
-            ckpt_path, map_location=torch.device('cpu'))['hyper_parameters']
+        resume_config = torch.load(ckpt_path, map_location=torch.device("cpu"))[
+            "hyper_parameters"
+        ]
 
         config = merge_configs(config, resume_config)
 
     args = merge_args_and_yaml(args, config)
 
     out_dir = Path(args.logdir, args.run_name)
-    histogram_file = Path(args.datadir, 'size_distribution.npy')
+    histogram_file = Path(args.datadir, "size_distribution.npy")
     histogram = np.load(histogram_file).tolist()
     pl_module = LigandPocketDDPM(
         outdir=out_dir,
@@ -86,22 +94,13 @@ if __name__ == "__main__":
         mode=args.mode,
         node_histogram=histogram,
         pocket_representation=args.pocket_representation,
-        virtual_nodes=args.virtual_nodes
+        virtual_nodes=args.virtual_nodes,
     )
 
-    logger = pl.loggers.WandbLogger(
-        save_dir=args.logdir,
-        project='ligand-pocket-ddpm',
-        group=args.wandb_params.group,
-        name=args.run_name,
-        id=args.run_name,
-        resume='must' if args.resume is not None else False,
-        entity=args.wandb_params.entity,
-        mode=args.wandb_params.mode,
-    )
+    mlflow_logger = get_mlflow_logger("see_loss", experiment_name="diffsbdd")
 
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
-        dirpath=Path(out_dir, 'checkpoints'),
+        dirpath=Path(out_dir, "checkpoints"),
         filename="best-model-epoch={epoch:02d}",
         monitor="loss/val",
         save_top_k=1,
@@ -109,14 +108,22 @@ if __name__ == "__main__":
         mode="min",
     )
 
+    # Log important files
+    mlflow_logger.experiment.log_artifact(mlflow_logger.run_id, __file__)
+    with open(os.path.join("configs", args.config), "r") as f:
+        mlflow_logger.experiment.log_artifact(
+            mlflow_logger.run_id, os.path.join("configs", args.config)
+        )
+
     trainer = pl.Trainer(
         max_epochs=args.n_epochs,
-        logger=logger,
+        logger=mlflow_logger,
         callbacks=[checkpoint_callback],
         enable_progress_bar=args.enable_progress_bar,
         num_sanity_val_steps=args.num_sanity_val_steps,
-        accelerator='gpu', devices=args.gpus,
-        strategy=('ddp' if args.gpus > 1 else None)
+        accelerator="gpu",
+        devices=args.gpus,
+        strategy=("ddp" if args.gpus > 1 else None),
     )
 
     trainer.fit(model=pl_module, ckpt_path=ckpt_path)

@@ -58,7 +58,7 @@ def get_bb_transform(n_xyz, ca_xyz, c_xyz):
 
     #    rotate around x-axis to move C into the xy-plane
     c_xyz = np.einsum('noj,nji,ni->no', Rz.transpose(0, 2, 1),
-                      Ry.transpose(0, 2, 1), c_xyz)
+                    Ry.transpose(0, 2, 1), c_xyz)
     theta_x = np.arctan2(c_xyz[:, 2], c_xyz[:, 1])
     Rx = rotation_matrix(theta_x, 0)
 
