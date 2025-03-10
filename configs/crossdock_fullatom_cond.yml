@@ -1,25 +1,23 @@
 run_name: "SE3-cond-full"
 logdir: "logdir"
-wandb_params:
-  mode: "online" # disabled, offline, online
-  entity: "my_username"
 dataset: "crossdock_full"
+whole_dataset: True
 datadir: "data/processed_crossdock_noH_full"
 enable_progress_bar: True
-num_sanity_val_steps: 0
+num_sanity_val_steps: 2
 
 mode: "pocket_conditioning" # joint, pocket_conditioning
 pocket_representation: "full-atom" # CA, full-atom
 batch_size: 16
 lr: 1.0e-3
 noise_factor: 1.0
-n_epochs: 1000
+n_epochs: 1500
 num_workers: 0
-gpus: 1
+gpus: [0, 1, 2, 3]
 clip_grad: True
 augment_rotation: False
 augment_noise: 0
-accumulate_grad_batches: 1
+accumulate_grad_batches: 2
 virtual_nodes: False
 
 auxiliary_loss: False
@@ -34,11 +32,13 @@ egnn_params:
   edge_cutoff_pocket: 5.0
   edge_cutoff_interaction: 5.0
   reflection_equivariant: False
-  joint_nf: 64
+  joint_nf: 32
   hidden_nf: 128
-  n_layers: 4
-  attention: False
-  tanh: False
+  n_layers: 5
+  use_squared_distances: True
+  attention: True
+  tanh: True
+  coords_range: 10
   norm_constant: 1
   inv_sublayers: 1
   sin_embedding: False
@@ -46,9 +46,9 @@ egnn_params:
   normalization_factor: 100 #1  # used if aggregation_method='sum'
 
 diffusion_params:
-  diffusion_steps: 100
+  diffusion_steps: 300
   diffusion_noise_schedule: "polynomial_2" # learned, cosine
-  diffusion_noise_precision: 5.0e-4
+  diffusion_noise_precision: 5.0e-5
   diffusion_loss_type: "l2" # vlb, l2
   normalize_factors: [1, 4] #[10, 4]  # [x, h]
 

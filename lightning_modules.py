@@ -58,6 +58,7 @@ class LigandPocketDDPM(pl.LightningModule):
         node_histogram,
         pocket_representation="CA",
         virtual_nodes=False,
+        whole_dataset=False,
     ):
         super(LigandPocketDDPM, self).__init__()
         self.save_hyperparameters()
@@ -73,6 +74,7 @@ class LigandPocketDDPM(pl.LightningModule):
         self.pocket_representation = pocket_representation
 
         self.dataset_name = dataset
+        self.whole_dataset = whole_dataset
         self.datadir = datadir
         self.outdir = outdir
         self.batch_size = batch_size
@@ -90,7 +92,7 @@ class LigandPocketDDPM(pl.LightningModule):
         self.num_workers = num_workers
         self.augment_noise = augment_noise
         self.augment_rotation = augment_rotation
-        self.dataset_info = dataset_params[dataset]
+        self.dataset_info = dataset_params[self.dataset_name]
         self.T = diffusion_params.diffusion_steps
         self.clip_grad = clip_grad
         if clip_grad:
@@ -164,6 +166,7 @@ class LigandPocketDDPM(pl.LightningModule):
             act_fn=torch.nn.SiLU(),
             n_layers=egnn_params.n_layers,
             attention=egnn_params.attention,
+            # use_squared_distances=egnn_params.use_squared_distances,
             tanh=egnn_params.tanh,
             norm_constant=egnn_params.norm_constant,
             inv_sublayers=egnn_params.inv_sublayers,
@@ -209,15 +212,20 @@ class LigandPocketDDPM(pl.LightningModule):
 
     def setup(self, stage: Optional[str] = None):
         if stage == "fit":
-            self.train_dataset = ProcessedLigandPocketDataset(
-                Path(self.datadir, "train_small.npz"), transform=self.data_transform
-            )
+            if not self.whole_dataset:
+                self.train_dataset = ProcessedLigandPocketDataset(
+                    Path(self.datadir, "train_10k.npz"), transform=self.data_transform
+                )
+            else:
+                self.train_dataset = ProcessedLigandPocketDataset(
+                    Path(self.datadir, "train.npz"), transform=self.data_transform
+                )
             self.val_dataset = ProcessedLigandPocketDataset(
-                Path(self.datadir, "val.npz"), transform=self.data_transform
+                Path(self.datadir, "val_10k.npz"), transform=self.data_transform
             )
         elif stage == "test":
             self.test_dataset = ProcessedLigandPocketDataset(
-                Path(self.datadir, "test.npz"), transform=self.data_transform
+                Path(self.datadir, "test_10k.npz"), transform=self.data_transform
             )
         else:
             raise NotImplementedError
@@ -321,7 +329,10 @@ class LigandPocketDDPM(pl.LightningModule):
             loss_t = -self.T * 0.5 * SNR_weight * (error_t_lig + error_t_pocket)
             loss_0 = loss_0_x_ligand + loss_0_x_pocket + loss_0_h
             loss_0 = loss_0 + neg_log_const_0
+
+        # NOTE: jean change
         nll = loss_t + loss_0 + kl_prior
+        # nll = loss_t
 
         # Correct for normalization on x.
         if not (self.loss_type == "l2" and self.training):
@@ -952,9 +963,9 @@ class LigandPocketDDPM(pl.LightningModule):
             # define pocket with reference ligand
             residues = utils.get_pocket_from_ligand(pdb_struct, ref_ligand)
 
-        #pocket is the dict with keys ['x', 'one_hot', ...]
+        # pocket is the dict with keys ['x', 'one_hot', ...]
         pocket = self.prepare_pocket(residues, repeats=n_samples)
-        
+
         # Pocket's center of mass
         pocket_com_before = scatter_mean(pocket["x"], pocket["mask"], dim=0)
 

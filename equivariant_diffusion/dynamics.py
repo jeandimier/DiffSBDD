@@ -19,6 +19,7 @@ class EGNNDynamics(nn.Module):
         hidden_nf=64,
         device="cpu",
         act_fn=torch.nn.SiLU(),
+        use_squared_distances=True,
         n_layers=4,
         attention=False,
         condition_time=True,
@@ -42,6 +43,7 @@ class EGNNDynamics(nn.Module):
         self.edge_cutoff_p = edge_cutoff_pocket
         self.edge_cutoff_i = edge_cutoff_interaction
         self.edge_nf = edge_embedding_dim
+        # self.use_squared_distances = use_squared_distances
 
         self.atom_encoder = nn.Sequential(
             nn.Linear(atom_nf, 2 * atom_nf), act_fn, nn.Linear(2 * atom_nf, joint_nf)
@@ -90,6 +92,7 @@ class EGNNDynamics(nn.Module):
                 normalization_factor=normalization_factor,
                 aggregation_method=aggregation_method,
                 reflection_equiv=reflection_equivariant,
+                # use_squared_distances=use_squared_distances,
             )
             self.node_nf = dynamics_node_nf
             self.update_pocket_coords = update_pocket_coords
@@ -133,6 +136,9 @@ class EGNNDynamics(nn.Module):
         # h = h_atoms
         # mask = mask_atoms
 
+        # get edges of a complete graph
+        edges = self.get_edges(mask_atoms, mask_residues, x_atoms, x_residues)
+
         if self.condition_time:
             if np.prod(t.size()) == 1:
                 # t is the same for all elements in batch.
@@ -141,9 +147,6 @@ class EGNNDynamics(nn.Module):
                 # t is different over the batch dimension.
                 h_time = t[mask]
             h = torch.cat([h, h_time], dim=1)
-
-        # get edges of a complete graph
-        edges = self.get_edges(mask_atoms, mask_residues, x_atoms, x_residues)
 
         # # NOTE: temporary line to test diffusion only on the ligand
         # edges = self.get_edges_ligand(mask_atoms, x_atoms)

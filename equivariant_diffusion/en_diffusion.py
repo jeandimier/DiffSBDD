@@ -1048,11 +1048,11 @@ class EnVariationalDiffusion(nn.Module):
         [x, 0.25*h] instead of just [x, h]
 
         Args:
-            ligand (_type_, optional): _description_. Defaults to None.
-            pocket (_type_, optional): _description_. Defaults to None.
+            ligand (dict[str, torch.Tensor], optional): Ligand data. Defaults to None.
+            pocket (dict[str, torch.Tensor], optional): Pocket data. Defaults to None.
 
         Returns:
-            _type_: _description_
+            tuple[dict[str, torch.Tensor]]: The ligand and pocket descriptive dictionaries
         """
         if ligand is not None:
             ligand["x"] = ligand["x"] / self.norm_values[0]
@@ -1071,6 +1071,16 @@ class EnVariationalDiffusion(nn.Module):
         return ligand, pocket
 
     def unnormalize(self, x, h_cat):
+        """Does the opposite of normalize, which is, rescale the data as it was given
+            in the dataset.
+
+        Args:
+            ligand (dict[str, torch.Tensor], optional): Ligand data. Defaults to None.
+            pocket (dict[str, torch.Tensor], optional): Pocket data. Defaults to None.
+
+        Returns:
+            tuple[dict[str, torch.Tensor]]: The ligand and pocket descriptive dictionaries
+        """
         x = x * self.norm_values[0]
         h_cat = h_cat * self.norm_values[1] + self.norm_biases[1]
 
@@ -1220,9 +1230,11 @@ class PositiveLinear(torch.nn.Module):
         super(PositiveLinear, self).__init__()
         self.in_features = in_features
         self.out_features = out_features
-        self.weight = torch.nn.Parameter(torch.empty((out_features, in_features)))
+        self.weight = torch.nn.parameter.Parameter(
+            torch.empty((out_features, in_features))
+        )
         if bias:
-            self.bias = torch.nn.Parameter(torch.empty(out_features))
+            self.bias = torch.nn.parameter.Parameter(torch.empty(out_features))
         else:
             self.register_parameter("bias", None)
         self.weight_init_offset = weight_init_offset
@@ -1257,7 +1269,7 @@ class GammaNetwork(torch.nn.Module):
 
         self.gamma_0 = torch.nn.Parameter(torch.tensor([-5.0]))
         self.gamma_1 = torch.nn.Parameter(torch.tensor([10.0]))
-        self.show_schedule()
+        # self.show_schedule()
 
     def show_schedule(self, num_steps=50):
         t = torch.linspace(0, 1, num_steps).view(num_steps, 1)

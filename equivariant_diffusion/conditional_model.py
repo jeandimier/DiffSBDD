@@ -63,10 +63,6 @@ class ConditionalDDPM(EnVariationalDiffusion):
         eps_lig_x = eps_lig[:, : self.n_dims]
         net_lig_x = net_out_lig[:, : self.n_dims]
 
-        # Compute sigma_0 and rescale to the integer scale of the data.
-        sigma_0 = self.sigma(gamma_0, target_tensor=z_0_lig)
-        sigma_0_cat = sigma_0 * self.norm_values[1]
-
         # Computes the error for the distribution
         # N(x | 1 / alpha_0 z_0 + sigma_0/alpha_0 eps_0, sigma_0 / alpha_0),
         # the weighting in the epsilon parametrization is exactly '1'.
@@ -80,6 +76,10 @@ class ConditionalDDPM(EnVariationalDiffusion):
         log_p_x_given_z0_without_constants_ligand = -0.5 * (
             self.sum_except_batch(squared_error, ligand["mask"])
         )
+
+        # Compute sigma_0 and rescale to the integer scale of the data.
+        sigma_0 = self.sigma(gamma_0, target_tensor=z_0_lig)
+        sigma_0_cat = sigma_0 * self.norm_values[1]
 
         # Compute delta indicator masks.
         # un-normalize
@@ -112,36 +112,6 @@ class ConditionalDDPM(EnVariationalDiffusion):
         )
 
         return log_p_x_given_z0_without_constants_ligand, log_ph_given_z0_ligand
-
-    def sample_p_xh_given_z0(
-        self, z0_lig, xh0_pocket, lig_mask, pocket_mask, batch_size, fix_noise=False
-    ):
-        """Samples x ~ p(x|z0)."""
-        t_zeros = torch.zeros(size=(batch_size, 1), device=z0_lig.device)
-        gamma_0 = self.gamma(t_zeros)
-        # Computes sqrt(sigma_0^2 / alpha_0^2)
-        sigma_x = self.SNR(-0.5 * gamma_0)
-        net_out_lig, _ = self.dynamics(
-            z0_lig, xh0_pocket, t_zeros, lig_mask, pocket_mask
-        )
-
-        # Compute mu for p(zs | zt).
-        mu_x_lig = self.compute_x_pred(net_out_lig, z0_lig, gamma_0, lig_mask)
-        xh_lig, xh0_pocket = self.sample_normal_zero_com(
-            mu_x_lig, xh0_pocket, sigma_x, lig_mask, pocket_mask, fix_noise
-        )
-
-        x_lig, h_lig = self.unnormalize(
-            xh_lig[:, : self.n_dims], z0_lig[:, self.n_dims :]
-        )
-        x_pocket, h_pocket = self.unnormalize(
-            xh0_pocket[:, : self.n_dims], xh0_pocket[:, self.n_dims :]
-        )
-
-        h_lig = F.one_hot(torch.argmax(h_lig, dim=1), self.atom_nf)
-        # h_pocket = F.one_hot(torch.argmax(h_pocket, dim=1), self.residue_nf)
-
-        return x_lig, h_lig, x_pocket, h_pocket
 
     def sample_normal(self, *args):
         raise NotImplementedError("Has been replaced by sample_normal_zero_com()")
@@ -176,8 +146,6 @@ class ConditionalDDPM(EnVariationalDiffusion):
         alpha_t = self.alpha(gamma_t, xh_lig)
         sigma_t = self.sigma(gamma_t, xh_lig)
 
-        # print(f"{alpha_t=}")
-        # print(f"{sigma_t=}")
         # Sample eps_t ~ Normal(alpha_t x, sigma_t)
         eps_lig = self.sample_gaussian(
             size=(len(lig_mask), self.n_dims + self.atom_nf), device=lig_mask.device
@@ -236,13 +204,6 @@ class ConditionalDDPM(EnVariationalDiffusion):
             size=(ligand["size"].size(0), 1),
             device=ligand["x"].device,
         ).float()
-        t_int = (
-            torch.ones(
-                size=(ligand["size"].size(0), 1),
-                device=ligand["x"].device,
-            )
-            * 10
-        )
 
         s_int = t_int - 1  # previous timestep
 
@@ -544,7 +505,6 @@ class ConditionalDDPM(EnVariationalDiffusion):
             zt_lig / alpha_t_given_s[ligand_mask]
             - (sigma2_t_given_s / alpha_t_given_s / sigma_t)[ligand_mask] * eps_t_lig
         )
-        # print(mu_lig[:, : self.n_dims].std().item())
         # Compute sigma for p(zs | zt).
         sigma = sigma_t_given_s * sigma_s / sigma_t
 
@@ -556,6 +516,37 @@ class ConditionalDDPM(EnVariationalDiffusion):
         self.assert_mean_zero_with_mask(zt_lig[:, : self.n_dims], ligand_mask)
 
         return zs_lig, xh0_pocket
+
+    def sample_p_xh_given_z0(
+        self, z0_lig, xh0_pocket, lig_mask, pocket_mask, batch_size, fix_noise=False
+    ):
+        """Samples [x, h] ~ p([x, h]|z0)."""
+        t_zeros = torch.zeros(size=(batch_size, 1), device=z0_lig.device)
+        gamma_0 = self.gamma(t_zeros)
+        # Computes sqrt(sigma_0^2 / alpha_0^2)
+        sigma_x = self.SNR(-0.5 * gamma_0)
+        net_out_lig, _ = self.dynamics(
+            z0_lig, xh0_pocket, t_zeros, lig_mask, pocket_mask
+        )
+
+        # Compute mu for p(zs | zt).
+        mu_x_lig = self.compute_x_pred(net_out_lig, z0_lig, gamma_0, lig_mask)
+        xh_lig, xh0_pocket = self.sample_normal_zero_com(
+            mu_x_lig, xh0_pocket, sigma_x, lig_mask, pocket_mask, fix_noise
+        )
+
+        x_lig, h_lig = self.unnormalize(
+            xh_lig[:, : self.n_dims], z0_lig[:, self.n_dims :]
+        )
+        x_pocket, h_pocket = self.unnormalize(
+            xh0_pocket[:, : self.n_dims], xh0_pocket[:, self.n_dims :]
+        )
+
+        h_lig = F.one_hot(torch.argmax(h_lig, dim=1), self.atom_nf)
+        # h_pocket = F.one_hot(torch.argmax(h_pocket, dim=1), self.residue_nf)
+
+        return x_lig, h_lig, x_pocket, h_pocket
+    
 
     def sample_combined_position_feature_noise(
         self, lig_indices, xh0_pocket, pocket_indices
@@ -604,6 +595,7 @@ class ConditionalDDPM(EnVariationalDiffusion):
             mu_lig, xh0_pocket, sigma, lig_mask, pocket["mask"]
         )
 
+        # TODO: check protein com
         self.assert_mean_zero_with_mask(z_lig[:, : self.n_dims], lig_mask)
 
         out_lig = torch.zeros((return_frames,) + z_lig.size(), device=z_lig.device)
@@ -804,6 +796,18 @@ class ConditionalDDPM(EnVariationalDiffusion):
 
     @classmethod
     def remove_mean_batch(cls, x_lig, x_pocket, lig_indices, pocket_indices):
+        """Here, corresponds to setting the center of mass of the **ligand** to 0.
+
+        Args:
+            x_lig (torch.Tensor): Positions of the ligand
+            x_pocket (torch.Tensor): Positions of the protein
+            lig_indices (torch.Tensor): The mask where 1 corresponds to belonging to the ligand
+            pocket_indices (torch.Tensor): The mask where 1 corresponds to belonging to the protein
+
+        Returns:
+            tuple(torch.Tensor, torch.Tensor): The centered positions of the ligand and of
+                the pocket
+        """
         # Just subtract the center of mass of the sampled part
         mean = scatter_mean(x_lig, lig_indices, dim=0)
 

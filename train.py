@@ -1,6 +1,8 @@
 import argparse
 import logging
 import os
+import pdb
+import sys
 import warnings
 from argparse import Namespace
 from pathlib import Path
@@ -10,8 +12,42 @@ import pytorch_lightning as pl
 import torch
 import yaml
 
+import mlflow_utils as utils
 from lightning_modules import LigandPocketDDPM
 from mlflow_utils import get_mlflow_logger
+
+# class DebugOutput:
+#     def __init__(self, original_output, stream_name):
+#         self.original_output = original_output
+#         self.stream_name = stream_name
+
+#     def write(self, text):
+#         # if text.strip():  # Ignore empty lines
+#         #     print(f"Intercepted {self.stream_name}: {text.strip()}")
+#         #     pdb.set_trace()  # Pause execution here
+#         self.original_output.write(text)
+
+#     def flush(self):
+#         self.original_output.flush()
+
+
+# # Save original stdout and stderr
+# original_stdout = sys.stdout
+# original_stderr = sys.stderr
+
+# # Redirect both stdout and stderr
+# sys.stdout = DebugOutput(original_stdout, "stdout")
+# sys.stderr = DebugOutput(original_stderr, "stderr")
+
+# # Run your code here
+# # Example: trainer.fit(model)
+
+# # # Restore original stdout and stderr
+# # sys.stdout = original_stdout
+# # sys.stderr = original_stderr
+
+
+logging.getLogger("pytorch_lightning").setLevel(logging.ERROR)
 
 
 def merge_args_and_yaml(args, config_dict):
@@ -95,6 +131,7 @@ if __name__ == "__main__":
         node_histogram=histogram,
         pocket_representation=args.pocket_representation,
         virtual_nodes=args.virtual_nodes,
+        whole_dataset=args.whole_dataset,
     )
 
     mlflow_logger = get_mlflow_logger("see_loss", experiment_name="diffsbdd")
@@ -107,6 +144,17 @@ if __name__ == "__main__":
         save_last=True,
         mode="min",
     )
+    callbacks = [
+        utils.MLFlowModelCheckpoint(
+            mlflow_logger,
+            filename="best_val_loss_pos",
+            monitor="error_t_lig_pos/val",
+            mode="min",
+        ),
+        utils.MLFlowModelCheckpoint(
+            mlflow_logger, filename="last_epoch", monitor="epoch", mode="max"
+        ),
+    ]
 
     # Log important files
     mlflow_logger.experiment.log_artifact(mlflow_logger.run_id, __file__)
@@ -115,15 +163,21 @@ if __name__ == "__main__":
             mlflow_logger.run_id, os.path.join("configs", args.config)
         )
 
+    which_gpus = list(range(args.gpus)) if isinstance(args.gpus, int) else args.gpus
+
     trainer = pl.Trainer(
         max_epochs=args.n_epochs,
         logger=mlflow_logger,
-        callbacks=[checkpoint_callback],
+        callbacks=callbacks,
         enable_progress_bar=args.enable_progress_bar,
         num_sanity_val_steps=args.num_sanity_val_steps,
         accelerator="gpu",
-        devices=args.gpus,
-        strategy=("ddp" if args.gpus > 1 else None),
+        devices=[0, 1, 2, 3],
+        strategy=("ddp" if len(which_gpus) > 1 else None),
+        accumulate_grad_batches=args.accumulate_grad_batches,
     )
 
+
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore", category=RuntimeWarning)
     trainer.fit(model=pl_module, ckpt_path=ckpt_path)
