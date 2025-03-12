@@ -404,7 +404,7 @@ if __name__ == "__main__":
             )
             count += 1
 
-            if count >= 4005:
+            if split == "train" and count >= 10005:
                 break
 
             if split in {"val", "test"}:
@@ -434,7 +434,7 @@ if __name__ == "__main__":
         pocket_mask = np.concatenate(pocket_mask, axis=0)
 
         saveall(
-            processed_dir / f"{split}_small.npz",
+            processed_dir / f"{split}_10k.npz",
             pdb_and_mol_ids,
             lig_coords,
             lig_one_hot,
@@ -450,7 +450,7 @@ if __name__ == "__main__":
     # --------------------------------------------------------------------------
     # Compute statistics & additional information
     # --------------------------------------------------------------------------
-    with np.load(processed_dir / "train_small.npz", allow_pickle=True) as data:
+    with np.load(processed_dir / "train_10k.npz", allow_pickle=True) as data:
         lig_mask = data["lig_mask"]
         pocket_mask = data["pocket_mask"]
         lig_coords = data["lig_coords"]

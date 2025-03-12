@@ -16,37 +16,6 @@ import mlflow_utils as utils
 from lightning_modules import LigandPocketDDPM
 from mlflow_utils import get_mlflow_logger
 
-# class DebugOutput:
-#     def __init__(self, original_output, stream_name):
-#         self.original_output = original_output
-#         self.stream_name = stream_name
-
-#     def write(self, text):
-#         # if text.strip():  # Ignore empty lines
-#         #     print(f"Intercepted {self.stream_name}: {text.strip()}")
-#         #     pdb.set_trace()  # Pause execution here
-#         self.original_output.write(text)
-
-#     def flush(self):
-#         self.original_output.flush()
-
-
-# # Save original stdout and stderr
-# original_stdout = sys.stdout
-# original_stderr = sys.stderr
-
-# # Redirect both stdout and stderr
-# sys.stdout = DebugOutput(original_stdout, "stdout")
-# sys.stderr = DebugOutput(original_stderr, "stderr")
-
-# # Run your code here
-# # Example: trainer.fit(model)
-
-# # # Restore original stdout and stderr
-# # sys.stdout = original_stdout
-# # sys.stderr = original_stderr
-
-
 logging.getLogger("pytorch_lightning").setLevel(logging.ERROR)
 
 
@@ -172,12 +141,20 @@ if __name__ == "__main__":
         enable_progress_bar=args.enable_progress_bar,
         num_sanity_val_steps=args.num_sanity_val_steps,
         accelerator="gpu",
-        devices=[0, 1, 2, 3],
+        devices=which_gpus,
         strategy=("ddp" if len(which_gpus) > 1 else None),
         accumulate_grad_batches=args.accumulate_grad_batches,
     )
 
+with warnings.catch_warnings(record=True) as w:
+    warnings.simplefilter("always")
+    warningNum = len(w)
+    "your code probably throw warning"
+    trainer.fit(model=pl_module, ckpt_path=ckpt_path)
+    if len(w) != warningNum:
+        warningNum = len(w)  # set break point here
+
 
 with warnings.catch_warnings():
-    warnings.filterwarnings("ignore", category=RuntimeWarning)
-    trainer.fit(model=pl_module, ckpt_path=ckpt_path)
+    warnings.filterwarnings("ignore", message="element")
+    # trainer.fit(model=pl_module, ckpt_path=ckpt_path)

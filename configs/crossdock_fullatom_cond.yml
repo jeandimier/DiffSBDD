@@ -1,14 +1,14 @@
 run_name: "SE3-cond-full"
 logdir: "logdir"
 dataset: "crossdock_full"
-whole_dataset: True
+whole_dataset: False
 datadir: "data/processed_crossdock_noH_full"
 enable_progress_bar: True
-num_sanity_val_steps: 2
+num_sanity_val_steps: 0
 
 mode: "pocket_conditioning" # joint, pocket_conditioning
 pocket_representation: "full-atom" # CA, full-atom
-batch_size: 16
+batch_size: 8
 lr: 1.0e-3
 noise_factor: 1.0
 n_epochs: 1500
@@ -38,7 +38,7 @@ egnn_params:
   use_squared_distances: True
   attention: True
   tanh: True
-  coords_range: 10
+  coords_range: 15
   norm_constant: 1
   inv_sublayers: 1
   sin_embedding: False
@@ -52,12 +52,12 @@ diffusion_params:
   diffusion_loss_type: "l2" # vlb, l2
   normalize_factors: [1, 4] #[10, 4]  # [x, h]
 
-eval_epochs: 50
+eval_epochs: 20
 visualize_sample_epoch: 50
 visualize_chain_epoch: 50
 eval_params:
-  n_eval_samples: 100
-  eval_batch_size: 100
+  n_eval_samples: 10
+  eval_batch_size: 10
   smiles_file: "train_smiles.npy"
   n_visualize_samples: 5
-  keep_frames: 100
+  keep_frames: 10

@@ -608,7 +608,8 @@ class LigandPocketDDPM(pl.LightningModule):
             )
 
             ligand, pocket = self.get_ligand_and_pocket(batch)
-            receptors.extend([self.get_full_path(x) for x in batch["receptors"]])
+            if "receptors" in batch.keys():
+                receptors.extend([self.get_full_path(x) for x in batch["receptors"]])
 
             if self.virtual_nodes:
                 num_nodes_lig = self.max_num_nodes
@@ -783,7 +784,8 @@ class LigandPocketDDPM(pl.LightningModule):
             name="/chain",
             batch_mask=mask_flat,
         )
-        visualize_chain(str(outdir), self.dataset_info, wandb=wandb)
+        # visualize_chain(str(outdir), self.dataset_info, wandb=wandb)
+        visualize_chain(str(outdir), self.dataset_info, wandb=None)
 
     def sample_chain_and_save_given_pocket(self, keep_frames):
         n_samples = 1
@@ -849,7 +851,8 @@ class LigandPocketDDPM(pl.LightningModule):
             name="/chain",
             batch_mask=mask_flat,
         )
-        visualize_chain(str(outdir), self.dataset_info, wandb=wandb)
+        # visualize_chain(str(outdir), self.dataset_info, wandb=wandb)
+        visualize_chain(str(outdir), self.dataset_info, wandb=None)
 
     def prepare_pocket(self, biopython_residues, repeats=1):
         if self.pocket_representation == "CA":

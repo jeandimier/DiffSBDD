@@ -4,10 +4,11 @@ from pathlib import Path
 import torch
 from openbabel import openbabel
 
-openbabel.obErrorLog.StopLogging()  # suppress OpenBabel messages
-
 import utils
 from lightning_modules import LigandPocketDDPM
+
+openbabel.obErrorLog.StopLogging()  # suppress OpenBabel messages
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -24,7 +25,7 @@ if __name__ == "__main__":
     parser.add_argument("--resamplings", type=int, default=10)
     parser.add_argument("--jump_length", type=int, default=1)
     parser.add_argument("--timesteps", type=int, default=None)
-    
+
     args = parser.parse_args()
 
     pdb_id = Path(args.pdbfile).stem
